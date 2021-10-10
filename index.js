@@ -1,57 +1,37 @@
 const path  = require('path');
 const {Worker} = require("worker_threads");
 
-class ComputedNumbersWorker {
+class WorkerMultiplexer {
   constructor(workerPath) {
-    this.workerPath = workerPath;
+    this.worker = new Worker(path.join(__dirname, workerPath));
   }
 
-  async start(context) {
-    let worker;
+  async execute(context) {
+    const { port1, port2 } = new MessageChannel();
     const promise = new Promise((res, rej) => {
-      worker = this.runWorker(path.join(__dirname, this.workerPath), (err, data) => {
-        if (err) {
-          return null;
-        }
-        res(data)
+      port1.on('message', (message) => {
+        res(message)
       });
     })
-    worker.postMessage(context);
-    return promise;
-  }
-
-  runWorker(path, cb, workerData = null) {
-    const worker = new Worker(path, { workerData });
-
-    worker.on('message', cb.bind(null, null));
-    worker.on('error', cb);
-
-    worker.on('exit', (exitCode) => {
-      if (exitCode === 0) {
-        return null;
-      }
-
-      return cb(new Error(`Worker has stopped with code ${exitCode}`));
-    });
-
-    return worker;
+    this.worker.postMessage({ port: port2, context }, [port2]);
+    return promise
   }
 }
 
-const ComputedWorker = new ComputedNumbersWorker('workers/worker.js')
-const ComputedWorker2 = new ComputedNumbersWorker('workers/worker2.js')
+const Channel1 = new WorkerMultiplexer('workers/worker.js')
+const Channel2 = new WorkerMultiplexer('workers/worker2.js')
 
-ComputedWorker.start([2,3])
+Channel1.execute([2,3])
   .then(data => {
-    console.log('data',data)
+    console.log('data 1',data)
   })
   .catch(err => {
     console.log('err',err)
   })
 
-ComputedWorker2.start([2,3,5])
+Channel2.execute([2,3,5])
   .then(data => {
-    console.log('data',data)
+    console.log('data 2',data)
   })
   .catch(err => {
     console.log('err',err)
